@@ -1,0 +1,23 @@
+[tool.poetry]
+name = "ganshowcase"
+version = "0.1.0"
+description = ""
+authors = ["Josh Murr <joshuadavidmurr@gmail.com>"]
+
+[tool.poetry.dependencies]
+python = ">=3.8,<3.12"
+chainer = "^7.8.1"
+absl-py = "^1.4.0"
+webdnn = "^1.2.11"
+h5py = "^3.8.0"
+Pillow-PIL = "^0.1dev"
+numpy = "^1.24.2"
+keras = "^2.11.0"
+tensorflowjs = "^4.2.0"
+tqdm = "^4.64.1"
+
+[tool.poetry.dev-dependencies]
+
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"

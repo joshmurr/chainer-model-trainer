@@ -1,3 +1,7 @@
 /scratch
 /scratch2
 /docs
+poetry.lock
+datasets/
+./code/npz/*
+**/*.zip
