@@ -206,12 +206,13 @@ class DCGANGenerator128(chainer.Chain):
 
         with self.init_scope():
             w = chainer.initializers.Normal(wscale)
-            self.l0 = L.Linear(self.n_hidden, bottom_width * bottom_width * ch, initialW=w)
-            self.dc1 = L.Deconvolution2D(ch, ch // 2, 4, 2, 1, initialW=w)
-            self.dc2 = L.Deconvolution2D(ch // 2, ch // 4, 4, 2, 1, initialW=w)
-            self.dc3 = L.Deconvolution2D(ch // 4, ch // 8, 4, 2, 1, initialW=w)
-            self.dc4 = L.Deconvolution2D(ch // 8, ch // 16, 4, 2, 1, initialW=w)
-            self.dc5 = L.Deconvolution2D(ch // 16, 3, 4, 2, 1, initialW=w)
+            self.l0 = L.Linear(self.n_hidden, bottom_width * bottom_width * ch, initialW=w) # out: (b, 16384, 1)
+                                                                                            # reshape: (128, 1024, 4, 4)
+            self.dc1 = L.Deconvolution2D(ch, ch // 2, 4, 2, 1, initialW=w)       # (b, 512, 8, 8)
+            self.dc2 = L.Deconvolution2D(ch // 2, ch // 4, 4, 2, 1, initialW=w)  # (b, 256, 16, 16)
+            self.dc3 = L.Deconvolution2D(ch // 4, ch // 8, 4, 2, 1, initialW=w)  # (b, 128, 32, 32)
+            self.dc4 = L.Deconvolution2D(ch // 8, ch // 16, 4, 2, 1, initialW=w) # (b, 64, 64, 64)
+            self.dc5 = L.Deconvolution2D(ch // 16, 3, 4, 2, 1, initialW=w)       # (b, 3, 128, 128)
             if self.use_bn:
                 self.bn0 = L.BatchNormalization(bottom_width * bottom_width * ch)
                 self.bn1 = L.BatchNormalization(ch // 2)
@@ -243,25 +244,28 @@ class DCGANGenerator128(chainer.Chain):
             h = self.hidden_activation(self.bn1(self.dc1(h)))
             h = self.hidden_activation(self.bn2(self.dc2(h)))
             h = self.hidden_activation(self.bn3(self.dc3(h)))
-            x = self.output_activation(self.dc4(h))
+            h = self.hidden_activation(self.bn4(self.dc4(h)))
+            x = self.output_activation(self.dc5(h))
         return x
 
+#(in_channels, out_channels, ksize=None, stride=1, pad=0, nobias=False, initialW=None, initial_bias=None, *, dilate=1, groups=1)
 
 class DCGANDiscriminator128(chainer.Chain):
-    def __init__(self, bottom_width=4, ch=1024, wscale=0.02, output_dim=1):
+    def __init__(self, bottom_width=2, ch=1024, wscale=0.02, output_dim=1):
         w = chainer.initializers.Normal(wscale)
         super().__init__()
-        with self.init_scope():
-            self.c0_0 = L.Convolution2D(3, ch // 16, 4, 2, 1, initialW=w)
-            self.c0_1 = L.Convolution2D(ch // 16, ch // 8, 4, 2, 1, initialW=w)
-            self.c1_0 = L.Convolution2D(ch // 8, ch // 8, 4, 2, 1, initialW=w)
-            self.c1_1 = L.Convolution2D(ch // 8, ch // 4, 4, 2, 1, initialW=w)
-            self.c2_0 = L.Convolution2D(ch // 4, ch // 4, 3, 1, 1, initialW=w)
-            self.c2_1 = L.Convolution2D(ch // 4, ch // 2, 4, 2, 1, initialW=w)
-            self.c3_0 = L.Convolution2D(ch // 2, ch // 2, 3, 1, 1, initialW=w)
-            self.c3_1 = L.Convolution2D(ch // 2, ch // 1, 4, 2, 1, initialW=w)
-            self.c4_0 = L.Convolution2D(ch // 1, ch // 1, 3, 1, 1, initialW=w)
-            self.l4 = L.Linear(bottom_width * bottom_width * ch, output_dim, initialW=w)
+        with self.init_scope():                                                 # out: (b,    c,  w,  h)
+            self.c0_0 = L.Convolution2D(3, ch // 16, 4, 2, 1, initialW=w)       # out: (b,   64, 64, 64)
+            self.c0_1 = L.Convolution2D(ch // 16, ch // 8, 4, 2, 1, initialW=w) # out: (b,   64, 32, 32)
+            self.c1_0 = L.Convolution2D(ch // 8, ch // 8, 3, 2, 1, initialW=w)  # out: (b,  128, 16, 16)
+            self.c1_1 = L.Convolution2D(ch // 8, ch // 4, 4, 2, 1, initialW=w)  # out: (b,  256,  8,  8)
+            self.c2_0 = L.Convolution2D(ch // 4, ch // 4, 3, 1, 1, initialW=w)  # out: (b,  256,  4,  4)
+            self.c2_1 = L.Convolution2D(ch // 4, ch // 2, 4, 2, 1, initialW=w)  # out: (b,  512,  2,  2)
+            self.c3_0 = L.Convolution2D(ch // 2, ch // 2, 3, 1, 1, initialW=w)  # out: (b,  512,  2,  2)
+            self.c3_1 = L.Convolution2D(ch // 2, ch // 1, 4, 2, 1, initialW=w)  # out: (b, 1024,  1,  1)
+            self.c4_0 = L.Convolution2D(ch // 1, ch // 1, 3, 1, 1, initialW=w)  # out: (b, 1024,  1,  1)
+
+            self.l4 = L.Linear(bottom_width * bottom_width * ch, output_dim, initialW=w) # in: (4096) out: (b, 1)
 
             self.bn0_1 = L.BatchNormalization(ch // 8, use_gamma=False)
             self.bn1_0 = L.BatchNormalization(ch // 8, use_gamma=False)

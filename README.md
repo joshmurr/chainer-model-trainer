@@ -1,6 +1,6 @@
 # GAN Showcase
 
-https://alantian.github.io/ganshowcase/ is available as a web showcase where a deep GAN (Generative Adversarial Network) that generates (or dreams) images. This repo contains all code for it. Feedback are welcome!
+<https://alantian.github.io/ganshowcase/> is available as a web showcase where a deep GAN (Generative Adversarial Network) that generates (or dreams) images. This repo contains all code for it. Feedback are welcome!
 
 Technically, the network architecture is similar to the residual network (ResNet) based generator
 ([Gulrajani et al.](https://arxiv.org/abs/1704.00028)),
@@ -14,8 +14,7 @@ which in turn is [converted](https://js.tensorflow.org/tutorials/import-keras.ht
 to a web-runnable [TensorFlow.js](https://js.tensorflow.org/) model.
 
 The dataset used for training is CelebAHQ, an dataset for [Karras et al.](https://openreview.net/forum?id=Hk99zCeAb&noteId=ryOnMk6rM)
-which can be obtained by consulting its GitHub repo (https://github.com/tkarras/progressive_growing_of_gans).
-
+which can be obtained by consulting its GitHub repo (<https://github.com/tkarras/progressive_growing_of_gans>).
 
 ## What is in This Repo
 
@@ -38,7 +37,7 @@ Dataset is stored as an [npz](https://docs.scipy.org/doc/numpy/reference/generat
 
 For using the folder of images, use
 
-```
+```bash
 DIR_PATH=...
 DATA_FILE=...
 SIZE=... # can be 64, 128 or 256
@@ -48,8 +47,7 @@ SIZE=... # can be 64, 128 or 256
 
 For using the CelebAHQ dataset which can be obtained by consulting [its GitHub repo](https://github.com/tkarras/progressive_growing_of_gans):
 
-
-```
+```bash
 CELEBAHQ_PATH=...  # should be an h5 file
 DATA_FILE=...
 SIZE=... # can be 64, 128 or 256
@@ -61,8 +59,7 @@ SIZE=... # can be 64, 128 or 256
 
 ### Step 2 - Training the model
 
-```
-
+```bash
 # Training DCGAN64 model
 DATA_FILE_SIZE_64=...  # Data file of size 64
 DCGAN64_OUT=... # Output directory
@@ -106,7 +103,7 @@ Note that due to difficulty in training GANs,
 you may want to select a proper snapshot by specifying `ITER` below.
 This script also samples a few images serving as a sanity check and providing clue for picking the correct snapshot.
 
-```
+```bash
 # DCGAN64
 
 ITER=50000
@@ -148,6 +145,7 @@ First you need to copy TensorFlow.js model (specified as argument to `--tfjs_mod
 modify `model_url` in `all_model_info` which is in the beginning of `index.js`.
 
 Then run the following:
+
 ```
 yarn
 yarn build
