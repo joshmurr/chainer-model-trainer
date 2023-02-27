@@ -9,12 +9,12 @@ from absl import flags
 from absl import logging
 
 import keras
-from keras import backend as K
+# from keras import backend as K
 from keras.layers.core import Activation
 from keras.models import Sequential, Model
-from keras.layers import Input, Dense, Reshape, UpSampling2D, Add
+from keras.layers import Input, Dense, Reshape, Add
 from keras.layers.convolutional import Conv2D, Conv2DTranspose
-from keras.layers.normalization import BatchNormalization
+from keras.layers import BatchNormalization
 import numpy as np
 from PIL import Image
 import tensorflowjs as tfjs
@@ -24,8 +24,8 @@ def _make_dense(input_dim, units, weight=None, kernel_arr_name=None, bias_arr_na
     return Dense(
         input_dim=input_dim,
         units=units,
-        kernel_initializer=(lambda x: np.transpose(weight[kernel_arr_name], (1, 0))),
-        bias_initializer=(lambda x: weight[bias_arr_name]),
+        kernel_initializer=(lambda _, dtype: np.transpose(weight[kernel_arr_name], (1, 0))),
+        bias_initializer=(lambda _, dtype: weight[bias_arr_name]),
     ) if weight else Dense(
         input_dim=input_dim,
         units=units,
@@ -40,10 +40,10 @@ def _make_batch_normalizzation(axis,
                                moving_variance_arr_name=None):
     return BatchNormalization(
         axis=1,
-        beta_initializer=(lambda x: weight[beta_arr_name]),
-        gamma_initializer=(lambda x: weight[gamma_arr_name]),
-        moving_mean_initializer=(lambda x: weight[moving_mean_arr_name]),
-        moving_variance_initializer=(lambda x: weight[moving_variance_arr_name]),
+        beta_initializer=(lambda _, dtype: weight[beta_arr_name]),
+        gamma_initializer=(lambda _, dtype: weight[gamma_arr_name]),
+        moving_mean_initializer=(lambda _, dtype: weight[moving_mean_arr_name]),
+        moving_variance_initializer=(lambda _, dtype: weight[moving_variance_arr_name]),
     ) if weight else BatchNormalization(axis=axis)
 
 
@@ -55,8 +55,8 @@ def _make_conv_2d_transpose(filters, kernel_size, strides, weight=None, kernel_a
         strides=strides,
         padding='same',
         data_format='channels_first',
-        kernel_initializer=(lambda x: np.transpose(weight[kernel_arr_name], (2, 3, 1, 0))),
-        bias_initializer=(lambda x: weight[bias_arr_name]),
+        kernel_initializer=(lambda _, dtype: np.transpose(weight[kernel_arr_name], (2, 3, 1, 0))),
+        bias_initializer=(lambda _, dtype: weight[bias_arr_name]),
     ) if weight else Conv2DTranspose(
         filters=filters,
         kernel_size=kernel_size,
@@ -111,6 +111,39 @@ def get_dcgan64_keras_generator(input_dim, ch, weight=None):
     model.add(_make_batch_normalizzation(1, weight, 'bn3/beta', 'bn3/gamma', 'bn3/avg_mean', 'bn3/avg_var'))
     model.add(Activation('relu'))
     model.add(_make_conv_2d_transpose(3, 4, 2, weight, 'dc4/W', 'dc4/b'))
+    model.add(Activation('tanh'))
+    return model
+
+
+def get_dcgan128_keras_generator(input_dim, ch, weight=None):
+    if weight:
+        print('=' * 80)
+        print('weight')
+        print('-' * 80)
+        keys = list(sorted(weight.keys()))
+
+        for key in keys:
+            print(key, weight[key].shape)
+        print('=' * 80)
+
+    model = Sequential()
+    model.add(_make_dense(input_dim, 4 * 4 * ch, weight, 'l0/W', 'l0/b'))
+    model.add(_make_batch_normalizzation(1, weight, 'bn0/beta', 'bn0/gamma', 'bn0/avg_mean', 'bn0/avg_var'))
+    model.add(Activation('relu'))
+    model.add(Reshape((ch, 4, 4)))
+    model.add(_make_conv_2d_transpose(ch // 2, 4, 2, weight, 'dc1/W', 'dc1/b'))
+    model.add(_make_batch_normalizzation(1, weight, 'bn1/beta', 'bn1/gamma', 'bn1/avg_mean', 'bn1/avg_var'))
+    model.add(Activation('relu'))
+    model.add(_make_conv_2d_transpose(ch // 4, 4, 2, weight, 'dc2/W', 'dc2/b'))
+    model.add(_make_batch_normalizzation(1, weight, 'bn2/beta', 'bn2/gamma', 'bn2/avg_mean', 'bn2/avg_var'))
+    model.add(Activation('relu'))
+    model.add(_make_conv_2d_transpose(ch // 8, 4, 2, weight, 'dc3/W', 'dc3/b'))
+    model.add(_make_batch_normalizzation(1, weight, 'bn3/beta', 'bn3/gamma', 'bn3/avg_mean', 'bn3/avg_var'))
+    model.add(Activation('relu'))
+    model.add(_make_conv_2d_transpose(ch // 16, 4, 2, weight, 'dc4/W', 'dc4/b'))
+    model.add(_make_batch_normalizzation(1, weight, 'bn4/beta', 'bn4/gamma', 'bn4/avg_mean', 'bn4/avg_var'))
+    model.add(Activation('relu'))
+    model.add(_make_conv_2d_transpose(3, 4, 2, weight, 'dc5/W', 'dc5/b'))
     model.add(Activation('tanh'))
     return model
 
@@ -265,8 +298,11 @@ def main(argv):
         get_generator = partial(get_resnet256_keras_generator, input_dim=128, ch=1024)
     elif FLAGS.arch == 'dcgan64':
         get_generator = partial(get_dcgan64_keras_generator, input_dim=128, ch=512)
+    elif FLAGS.arch == 'dcgan128':
+        get_generator = partial(get_dcgan128_keras_generator, input_dim=128, ch=1024)
     else:
         raise ValueError('Unknow --arch %s' % FLAGS.arch)
+
 
     generator = get_generator(weight=weight)
     print('Keras summary')
