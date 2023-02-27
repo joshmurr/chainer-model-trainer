@@ -113,9 +113,11 @@ FLAGS = flags.FLAGS
 flags.DEFINE_string('task', '', '')
 flags.DEFINE_string('dir_path', '', '')
 flags.DEFINE_string('npz_path', '', '')
+flags.DEFINE_string('npz_prefix', '', '')
 flags.DEFINE_string('multisize_h5_path', '', '')
 flags.DEFINE_integer('size', 64, 'Size for images')
 flags.DEFINE_integer('max_images', -1, 'Max number of images to process. -1 for no limitation.')
+flags.DEFINE_integer('batches', -1, 'Batch dataset to reduce compute overhead... :(')
 flags.DEFINE_integer('num_threads', 40, 'Number of concurrent threads.')
 flags.DEFINE_integer('num_tasks', 600, 'Number of concurrent processing tasks.')
 
@@ -167,10 +169,10 @@ def npz_to_dir():
 
 
 def dir_to_npz():
-    output_dir = os.path.dirname(FLAGS.npz_path)
-    os.system('mkdir -p %s' % output_dir)
-
-    logging.info('Creating custom dataset %s from %s' % (FLAGS.npz_path, FLAGS.dir_path))
+    # output_dir = os.path.dirname(FLAGS.npz_path)
+    # os.system('mkdir -p %s' % output_dir)
+    #
+    logging.info('Creating custom dataset %s from %s' % (FLAGS.npz_prefix, FLAGS.dir_path))
     glob_pattern = os.path.join(FLAGS.dir_path, '*')
     image_filenames = sorted(glob.glob(glob_pattern))
     if len(image_filenames) == 0:
@@ -207,24 +209,36 @@ def dir_to_npz():
 
         return img
 
-    if FLAGS.max_images > -1:
-        image_filenames = image_filenames[:FLAGS.max_images]
+    print(f"Total images: {len(image_filenames)}")
 
-    with ThreadPool(FLAGS.num_threads) as pool:
-        imgs = []
-        print()
-        for img in pool.process_items_concurrently(
-                image_filenames, process_func=process_func, max_items_in_flight=FLAGS.num_tasks):
-            imgs.append(img)
-            print('%d / %d\r' % (len(imgs), len(image_filenames)), end=' ')
-        print()
-        logging.info('Added %d images.' % len(image_filenames))
+    if FLAGS.batches > -1:
+        print(f"Batching a total of {len(image_filenames)} images in to {FLAGS.batches} batches.")
+        batch_size = len(image_filenames) // FLAGS.batches
+        print(f"Each batch contains {batch_size} images.")
+        image_filenames = [image_filenames[i*batch_size:(i+1)*batch_size] for i in range(FLAGS.batches + 1)]
+    elif FLAGS.max_images > -1:
+        # All images
+        image_filenames = [image_filenames[:FLAGS.max_images]]
 
-    logging.info('Converting to numpy array')
-    imgs = np.array(imgs, dtype=np.uint8)
+    for i, batch in enumerate(image_filenames):
+        with ThreadPool(FLAGS.num_threads) as pool:
+            imgs = []
+            img_counter = 0
+            print()
+            for img in pool.process_items_concurrently(
+                    batch, process_func=process_func, max_items_in_flight=FLAGS.num_tasks):
+                imgs.append(img)
+                img_counter += 1
+                print('%d / %d\r' % (img_counter, len(batch)), end=' ')
+            print()
+            logging.info('Added %d images.' % len(batch))
 
-    logging.info('Saving numpy array to %s.', FLAGS.npz_path)
-    np.savez(FLAGS.npz_path, **{'size_%s' % (FLAGS.size): imgs})
+        logging.info('Converting to numpy array')
+        imgs = np.array(imgs, dtype=np.uint8)
+
+        filename = './dataset/%s_%s.npz' % (i, FLAGS.npz_prefix)
+        logging.info('Saving numpy array to %s.', filename)
+        np.savez(filename, **{'size_%s' % (FLAGS.size): imgs})
 
 
 def main(argv):

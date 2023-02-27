@@ -1,5 +1,5 @@
 [tool.poetry]
-name = "ganshowcase"
+name = "chainer-model-trainer"
 version = "0.1.0"
 description = ""
 authors = ["Josh Murr <joshuadavidmurr@gmail.com>"]
