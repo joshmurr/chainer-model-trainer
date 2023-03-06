@@ -20,8 +20,10 @@ from chainer import training
 from chainer.training import extension
 from chainer.training import extensions
 import numpy as np
+import tensorflow as tf
 from PIL import Image
 
+import tensorflow_datasets as tfds
 
 def record_setting(out):
     """Record scripts and commandline arguments"""
@@ -288,7 +290,128 @@ class DCGANDiscriminator128(chainer.Chain):
         h = F.leaky_relu(self.bn4_0(self.c4_0(h)))
         return self.l4(h)
 
-# ******* GAN 128 x 128 ************************************************ #
+# ******* GAN 256 x 256 ************************************************ #
+
+class DCGANGenerator256(chainer.Chain):
+    def __init__(self,
+                 n_hidden=128,
+                 bottom_width=4,
+                 ch=1024,
+                 wscale=0.02,
+                 z_distribution="normal",
+                 hidden_activation=F.relu,
+                 output_activation=F.tanh,
+                 use_bn=True):
+        super().__init__()
+        self.n_hidden = n_hidden
+        self.ch = ch
+        self.bottom_width = bottom_width
+        self.z_distribution = z_distribution
+        self.hidden_activation = hidden_activation
+        self.output_activation = output_activation
+        self.use_bn = use_bn
+
+        with self.init_scope():
+            w = chainer.initializers.Normal(wscale)
+            self.l0 = L.Linear(self.n_hidden, bottom_width * bottom_width * ch, initialW=w) # out: (b, 16384, 1)
+                                                                                            # reshape: (128, 1024, 4, 4)
+            self.dc1 = L.Deconvolution2D(ch, ch // 2, 4, 2, 1, initialW=w)       # (b, 512, 8, 8)
+            self.dc2 = L.Deconvolution2D(ch // 2, ch // 4, 4, 2, 1, initialW=w)  # (b, 256, 16, 16)
+            self.dc3 = L.Deconvolution2D(ch // 4, ch // 8, 4, 2, 1, initialW=w)  # (b, 128, 32, 32)
+            self.dc4 = L.Deconvolution2D(ch // 8, ch // 8, 4, 2, 1, initialW=w) # (b, 64, 64, 64)
+            self.dc5 = L.Deconvolution2D(ch // 8, ch // 16, 4, 2, 1, initialW=w)       # (b, 64, 128, 128)
+            self.dc6 = L.Deconvolution2D(ch // 16, 3, 4, 2, 1, initialW=w)       # (b, 3, 256, 256)
+            if self.use_bn:
+                self.bn0 = L.BatchNormalization(bottom_width * bottom_width * ch)
+                self.bn1 = L.BatchNormalization(ch // 2)
+                self.bn2 = L.BatchNormalization(ch // 4)
+                self.bn3 = L.BatchNormalization(ch // 8)
+                self.bn4 = L.BatchNormalization(ch // 8)
+                self.bn5 = L.BatchNormalization(ch // 16)
+
+    def make_hidden(self, batchsize):
+        if self.z_distribution == "normal":
+            return np.random.randn(batchsize, self.n_hidden, 1, 1) \
+                .astype(np.float32)
+        elif self.z_distribution == "uniform":
+            return np.random.uniform(-1, 1, (batchsize, self.n_hidden, 1, 1)) \
+                .astype(np.float32)
+        else:
+            raise Exception("unknown z distribution: %s" % self.z_distribution)
+
+    def __call__(self, z):
+        if not self.use_bn:
+            h = F.reshape(self.hidden_activation(self.l0(z)), (len(z), self.ch, self.bottom_width, self.bottom_width))
+            h = self.hidden_activation(self.dc1(h))
+            h = self.hidden_activation(self.dc2(h))
+            h = self.hidden_activation(self.dc3(h))
+            h = self.output_activation(self.dc4(h))
+            h = self.output_activation(self.dc5(h))
+            x = self.output_activation(self.dc6(h))
+        else:
+            h = F.reshape(
+                self.hidden_activation(self.bn0(self.l0(z))), (len(z), self.ch, self.bottom_width, self.bottom_width))
+            h = self.hidden_activation(self.bn1(self.dc1(h)))
+            h = self.hidden_activation(self.bn2(self.dc2(h)))
+            h = self.hidden_activation(self.bn3(self.dc3(h)))
+            h = self.hidden_activation(self.bn4(self.dc4(h)))
+            h = self.hidden_activation(self.bn5(self.dc5(h)))
+            x = self.output_activation(self.dc6(h))
+        return x
+
+class DCGANDiscriminator256(chainer.Chain):
+    def __init__(self, bottom_width=2, ch=1024, wscale=0.02, output_dim=1):
+        w = chainer.initializers.Normal(wscale)
+        super().__init__()
+        with self.init_scope():                                                 # out: (b,    c,  w,  h)
+            self.c0_0 = L.Convolution2D(3, ch // 16, 4, 2, 1, initialW=w)       # out: (b,   64, 64, 64)
+            self.c0_1 = L.Convolution2D(ch // 16, ch // 8, 4, 2, 1, initialW=w) # out: (b,   64, 32, 32)
+            self.c1_0 = L.Convolution2D(ch // 8, ch // 8, 3, 2, 1, initialW=w)  # out: (b,  128, 16, 16)
+            self.c1_1 = L.Convolution2D(ch // 8, ch // 4, 4, 2, 1, initialW=w)  # out: (b,  256,  8,  8)
+
+            self.c2_0 = L.Convolution2D(ch // 8, ch // 8, 3, 2, 1, initialW=w)  # out: (b,  128, 16, 16)
+            self.c2_1 = L.Convolution2D(ch // 8, ch // 4, 4, 2, 1, initialW=w)  # out: (b,  256,  8,  8)
+
+            self.c3_0 = L.Convolution2D(ch // 4, ch // 4, 3, 1, 1, initialW=w)  # out: (b,  256,  4,  4)
+            self.c3_1 = L.Convolution2D(ch // 4, ch // 2, 4, 2, 1, initialW=w)  # out: (b,  512,  2,  2)
+            self.c4_0 = L.Convolution2D(ch // 2, ch // 2, 3, 1, 1, initialW=w)  # out: (b,  512,  2,  2)
+            self.c4_1 = L.Convolution2D(ch // 2, ch // 1, 4, 2, 1, initialW=w)  # out: (b, 1024,  1,  1)
+            self.c5_0 = L.Convolution2D(ch // 1, ch // 1, 3, 1, 1, initialW=w)  # out: (b, 1024,  1,  1)
+
+            self.l4 = L.Linear(bottom_width * bottom_width * ch, output_dim, initialW=w) # in: (4096) out: (b, 1)
+
+            self.bn0_1 = L.BatchNormalization(ch // 8, use_gamma=False)
+            self.bn1_0 = L.BatchNormalization(ch // 8, use_gamma=False)
+            self.bn1_1 = L.BatchNormalization(ch // 4, use_gamma=False)
+            self.bn2_0 = L.BatchNormalization(ch // 4, use_gamma=False)
+
+            self.bn2_1 = L.BatchNormalization(ch // 4, use_gamma=False)
+            self.bn3_0 = L.BatchNormalization(ch // 4, use_gamma=False)
+
+            self.bn3_1 = L.BatchNormalization(ch // 2, use_gamma=False)
+            self.bn4_0 = L.BatchNormalization(ch // 2, use_gamma=False)
+            self.bn4_1 = L.BatchNormalization(ch // 1, use_gamma=False)
+            self.bn5_0 = L.BatchNormalization(ch // 1, use_gamma=False)
+
+    def __call__(self, x):
+        h = F.leaky_relu(self.c0_0(x))
+        h = F.leaky_relu(self.bn0_1(self.c0_1(h)))
+        h = F.leaky_relu(self.bn1_0(self.c1_0(h)))
+        h = F.leaky_relu(self.bn1_1(self.c1_1(h)))
+        h = F.leaky_relu(self.bn2_0(self.c2_0(h)))
+
+        h = F.leaky_relu(self.bn2_1(self.c2_1(h)))
+        h = F.leaky_relu(self.bn3_0(self.c3_0(h)))
+
+        h = F.leaky_relu(self.bn3_1(self.c3_1(h)))
+        h = F.leaky_relu(self.bn4_0(self.c4_0(h)))
+        h = F.leaky_relu(self.bn4_1(self.c4_1(h)))
+        h = F.leaky_relu(self.bn5_0(self.c5_0(h)))
+        return self.l4(h)
+
+
+# *********** END 256x256 MODEL ****************
+
 
 class ResNetResBlockUp(chainer.Chain):
     def __init__(self, in_ch, out_ch=None, wscale=0.02):
@@ -722,6 +845,22 @@ def make_optimizer(model, alpha, beta1, beta2):
     optimizer.setup(model)
     return optimizer
 
+def prepareCelebADatasetFromTensorflow(size):
+    def resize(_size):
+      def parse(batch):
+          image = batch["image"]
+          print(image)
+          image = tf.image.convert_image_dtype(image, tf.uint8)
+          shapes = tf.shape(image)
+          h, w = shapes[1], shapes[2]
+          small = tf.minimum(h, w)
+          image = tf.image.resize_with_crop_or_pad(image, small, small)
+          image = tf.image.resize(image, _size)
+          return image
+      return parse
+    dataset = tfds.load('celeb_a', shuffle_files=True)
+    dataset = dataset.map(resize(size))
+
 
 def main(argv):
     del argv  # Unused.
@@ -764,6 +903,10 @@ def main(argv):
         generator_class = DCGANGenerator128
         discriminator_class = DCGANDiscriminator128
         assert FLAGS.image_size == 128
+    elif FLAGS.arch == 'dcgan256':
+        generator_class = DCGANGenerator256
+        discriminator_class = DCGANDiscriminator256
+        assert FLAGS.image_size == 256
     elif FLAGS.arch == 'resnet128':
         generator_class = ResNetGenerator128
         discriminator_class = ResNetDiscriminator128

@@ -1,35 +1,14 @@
-# GAN Showcase
+# Model Trainer for [gl-activation-map-viewer](https://github.com/joshmurr/gl-activation-map-viewer)
 
-<https://alantian.github.io/ganshowcase/> is available as a web showcase where a deep GAN (Generative Adversarial Network) that generates (or dreams) images. This repo contains all code for it. Feedback are welcome!
+This is a fork of *Alantian's* [ganshowcase](https://github.com/alantian/ganshowcase). I pinched their original trained DCGAN model and so adapted the code to train a few more models under the same architecture. I probably wouldn't have used Chainer otherwise tbh..
 
-Technically, the network architecture is similar to the residual network (ResNet) based generator
-([Gulrajani et al.](https://arxiv.org/abs/1704.00028)),
-as well as the classical DCGAN generator [Radford et al.](https://arxiv.org/abs/1511.06434)
-and the GAN training uses DRAGAN [Kodali et al.](https://arxiv.org/abs/1705.07215)
-style gradient penalty for better stability.
+This repo differs in a number of ways:
 
-Training code is written in[Chainer](https://chainer.org/).
-The trained model is then manually converted to a [Keras](https://keras.io/") model,
-which in turn is [converted](https://js.tensorflow.org/tutorials/import-keras.html")
-to a web-runnable [TensorFlow.js](https://js.tensorflow.org/) model.
-
-The dataset used for training is CelebAHQ, an dataset for [Karras et al.](https://openreview.net/forum?id=Hk99zCeAb&noteId=ryOnMk6rM)
-which can be obtained by consulting its GitHub repo (<https://github.com/tkarras/progressive_growing_of_gans>).
+- Addition of 128x128 and 256x256 DCGAN models.
+- Adapted *datatool.py* with a few more arguments.
+- TODO: finish this list..
 
 ## What is in This Repo
-
-This repo consists of code that
-
-1. Prepares data
-2. trains deep GAN.
-3. Converts the saved model to a web-runnable one.
-4. Presents the deep neural network, running completely in the browser.
-
-## How to use the code
-
-Step 1 through 3 are done offline and are covered by scripts in `./code/` directory and their discussing assumes that you are in `./code/` directory.
-Also note several bash variables in `UPPERCASE` should be adjusted
-accordingly.
 
 ### Step 1 - Prepare data
 
